@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>index</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mut:#5d6677;--bd:#d9dde5;--ac:#2456d6;--ac2:#d9531e;--ok:#17803d}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--card:#1b202b;--tx:#e8ebf2;--mut:#9aa3b5;--bd:#2c3444;--ac:#6b9bff;--ac2:#ff8a57;--ok:#4ade80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151c;--card:#1b202b;--tx:#e8ebf2;--mut:#9aa3b5;--bd:#2c3444;--ac:#6b9bff;--ac2:#ff8a57;--ok:#4ade80;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:20px 14px 40px}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:0 0 10px}
+.sub{color:var(--mut);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:block;font-size:.8rem;color:var(--mut);margin-bottom:3px}
+input{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+button{margin-top:14px;padding:10px 22px;border:0;border-radius:8px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6}
+.hint{font-size:.75rem;color:var(--mut);margin-top:2px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:480px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}
+th{color:var(--mut);font-weight:600;font-size:.8rem}
+pre{margin:0;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.kv div{background:var(--bg);border-radius:8px;padding:10px}
+.kv b{display:block;font-size:1.2rem}.kv span{font-size:.78rem;color:var(--mut)}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+svg{width:100%;height:auto;display:block}
+svg text{fill:var(--tx);font:11px system-ui,sans-serif}svg .m{fill:var(--mut)}
+.err{color:#c62828;margin-top:8px}
+#out{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Ex 3: B+ tree for a database indexing use-case</h1>
+<p class="sub">EMPLOYEE(emp_id, name, dept, salary) indexed on emp_id. Enter the parameters, run, and inspect the tree, I/O costs and charts.</p>
+
+<section class="card">
+<h2>Inputs</h2>
+<div class="grid">
+<div><label for="N">Number of records (n)</label><input id="N" type="number" value="100000" min="100" max="300000"></div>
+<div><label for="orders">Orders m (comma-separated)</label><input id="orders" value="4,16,64,128"><div class="hint">each m ≥ 3, up to 6 values</div></div>
+<div><label for="seed">Random seed</label><input id="seed" type="number" value="7"></div>
+<div><label for="lk">Sample lookups per order</label><input id="lk" type="number" value="1000" min="1" max="20000"></div>
+<div><label for="qo">Order for queries below</label><input id="qo" type="number" value="64" min="3"></div>
+<div><label for="pk">Point query emp_id</label><input id="pk" placeholder="blank = random existing"></div>
+<div><label for="lo">Range low</label><input id="lo" type="number" value="500000"></div>
+<div><label for="hi">Range high</label><input id="hi" type="number" value="501000"></div>
+<div><label for="dk">Delete emp_id</label><input id="dk" placeholder="blank = point query key"></div>
+<div><label for="dm">Small demo order</label><input id="dm" type="number" value="4" min="3" max="8"></div>
+</div>
+<div style="margin-top:12px"><label for="dkeys">Small demo keys (comma-separated)</label><input id="dkeys" value="10,20,5,6,12,30,7,17,3,25,28,40"></div>
+<button id="run">Build index &amp; run</button>
+<div class="err" id="err"></div>
+</section>
+
+<div id="out">
+<section class="card"><h2>1. Small tree after inserts</h2><div class="scroll"><pre id="demo"></pre></div></section>
+
+<section class="card"><h2>2. Index build results</h2>
+<div class="scroll"><table id="tbl"></table></div>
+<p class="hint" id="note"></p></section>
+
+<section class="card"><h2>3. Point query, range query and delete</h2>
+<div class="kv" id="kv"></div>
+<div class="scroll" style="margin-top:12px"><pre id="rows"></pre></div></section>
+
+<section class="card"><h2>4. Graphical analysis</h2>
+<div class="charts"><div id="c1"></div><div id="c2"></div></div>
+<p class="hint">Left: measured height (= page reads per lookup) against the theoretical bound ⌈log<sub>⌈m/2⌉</sub> n⌉. Right (log scale): pages read for the indexed range query against a full table scan.</p></section>
+</div>
+</main>
+
+<script>
+class Node{constructor(l){this.leaf=l;this.keys=[];this.ch=[];this.next=null}}
+const bl=(a,x)=>{let l=0,h=a.length;while(l<h){const m=(l+h)>>1;a[m]<x?l=m+1:h=m}return l};
+const br=(a,x)=>{let l=0,h=a.length;while(l<h){const m=(l+h)>>1;a[m]<=x?l=m+1:h=m}return l};
+class BPT{
+ constructor(o){this.order=o;this.mk=o-1;this.root=new Node(true);this.reads=0}
+ leafFor(k){let n=this.root;this.reads++;while(!n.leaf){n=n.ch[br(n.keys,k)];this.reads++}return n}
+ search(k){const l=this.leafFor(k),i=bl(l.keys,k);return i<l.keys.length&&l.keys[i]===k?l.ch[i]:null}
+ range(lo,hi){let l=this.leafFor(lo);const out=[];while(l){for(let j=0;j<l.keys.length;j++){const k=l.keys[j];if(k>hi)return out;if(k>=lo)out.push([k,l.ch[j]])}l=l.next;if(l)this.reads++}return out}
+ insert(k,r){const s=this._ins(this.root,k,r);if(s){const n=new Node(false);n.keys=[s[0]];n.ch=[this.root,s[1]];this.root=n}}
+ _ins(n,k,r){
+  if(n.leaf){const i=bl(n.keys,k);if(i<n.keys.length&&n.keys[i]===k){n.ch[i]=r;return null}
+   n.keys.splice(i,0,k);n.ch.splice(i,0,r);if(n.keys.length<=this.mk)return null;
+   const m=n.keys.length>>1,R=new Node(true);R.keys=n.keys.slice(m);R.ch=n.ch.slice(m);n.keys=n.keys.slice(0,m);n.ch=n.ch.slice(0,m);R.next=n.next;n.next=R;return[R.keys[0],R]}
+  const i=br(n.keys,k),s=this._ins(n.ch[i],k,r);if(!s)return null;
+  n.keys.splice(i,0,s[0]);n.ch.splice(i+1,0,s[1]);if(n.keys.length<=this.mk)return null;
+  const m=n.keys.length>>1,R=new Node(false),up=n.keys[m];R.keys=n.keys.slice(m+1);R.ch=n.ch.slice(m+1);n.keys=n.keys.slice(0,m);n.ch=n.ch.slice(0,m+1);return[up,R]}
+ del(k){const l=this.leafFor(k),i=bl(l.keys,k);if(i<l.keys.length&&l.keys[i]===k){l.keys.splice(i,1);l.ch.splice(i,1);return true}return false}
+ stats(){let h=0,n=this.root;for(;;){h++;if(n.leaf)break;n=n.ch[0]}let c=0,lv=0;const st=[this.root];while(st.length){const x=st.pop();c++;if(x.leaf)lv++;else st.push(...x.ch)}return[h,c,lv]}
+ levels(){let L=[this.root];const o=[];while(L.length){o.push(L.map(n=>'['+n.keys.join(', ')+']').join('  '));L=L[0].leaf?[]:L.flatMap(n=>n.ch)}return o}
+}
+function rng(s){let a=s>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+const $=id=>document.getElementById(id),fmt=n=>n.toLocaleString('en-US');
+function svgBars(title,labels,series,{log=false,ylab=''}={}){
+ const W=420,H=280,L=48,R=12,T=34,B=44,pw=W-L-R,ph=H-T-B;
+ const all=series.flatMap(s=>s.v),mx=Math.max(...all,1);
+ const f=v=>log?Math.log10(Math.max(v,1))/Math.log10(mx*1.2):v/(mx*1.15);
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title}"><text x="${W/2}" y="16" text-anchor="middle" style="font-weight:600;font-size:12px">${title}</text>`;
+ for(let i=0;i<=4;i++){const y=T+ph-ph*i/4;let v=log?Math.pow(10,Math.log10(mx*1.2)*i/4):mx*1.15*i/4;
+  s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--bd)"/><text class="m" x="${L-5}" y="${y+4}" text-anchor="end">${v>=100?fmt(Math.round(v)):v.toFixed(v<10?1:0)}</text>`}
+ const g=pw/labels.length,bw=Math.min(36,g/(series.length+1));
+ labels.forEach((lb,i)=>{const cx=L+g*i+g/2;
+  series.forEach((se,j)=>{const x=cx-bw*series.length/2+bw*j,h=ph*f(se.v[i]);
+   if(se.type==='bar'){s+=`<rect x="${x}" y="${T+ph-h}" width="${bw-2}" height="${h}" rx="3" fill="${se.c}"/><text x="${x+bw/2-1}" y="${T+ph-h-4}" text-anchor="middle">${fmt(se.v[i])}</text>`}});
+  s+=`<text x="${cx}" y="${H-B+16}" text-anchor="middle">${lb}</text>`});
+ const lines=series.filter(x=>x.type==='line');
+ lines.forEach(se=>{const pts=se.v.map((v,i)=>[L+g*i+g/2,T+ph-ph*f(v)]);
+  s+=`<polyline fill="none" stroke="${se.c}" stroke-width="2" stroke-dasharray="5 3" points="${pts.map(p=>p.join(',')).join(' ')}"/>`+pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${se.c}"/><text x="${p[0]+6}" y="${p[1]-6}" style="fill:${se.c}">${se.v[i]}</text>`).join('')});
+ s+=`<text class="m" x="${W/2}" y="${H-6}" text-anchor="middle">${ylab}</text>`;
+ let lx=L;series.forEach(se=>{s+=`<rect x="${lx}" y="${T-12}" width="9" height="9" fill="${se.c}"/><text x="${lx+13}" y="${T-4}">${se.n}</text>`;lx+=se.n.length*6+34});
+ return s+'</svg>'}
+
+function run(){
+ const err=$('err');err.textContent='';
+ try{
+  const N=+$('N').value,seed=+$('seed').value,LK=+$('lk').value,qo=+$('qo').value,dm=+$('dm').value;
+  const orders=$('orders').value.split(',').map(x=>+x.trim()).filter(x=>x);
+  if(!(N>=100&&N<=300000))throw'Number of records must be between 100 and 300,000.';
+  if(!orders.length||orders.length>6||orders.some(o=>!Number.isInteger(o)||o<3))throw'Orders must be 1 to 6 integers, each at least 3.';
+  if(!(qo>=3)||!(dm>=3))throw'Orders for the queries and the demo must be at least 3.';
+  const dk=$('dkeys').value.split(',').map(x=>+x.trim()).filter(x=>!isNaN(x)&&x!=='');
+  const R=rng(seed),depts=['CSE','ECE','MECH','CIVIL','EEE'];
+  const set=new Set(),ids=[];const span=900000;if(N>span)throw'Too many records for the id range.';
+  while(ids.length<N){const v=100000+Math.floor(R()*span);if(!set.has(v)){set.add(v);ids.push(v)}}
+  const dept=ids.map(()=>depts[Math.floor(R()*5)]),sal=ids.map(()=>30000+Math.floor(R()*170001));
+  const rec=r=>`(${ids[r]}, 'Emp${r}', '${dept[r]}', ${sal[r]})`;
+  // demo
+  const d=new BPT(dm);dk.forEach(k=>d.insert(k,'RID'+k));
+  $('demo').textContent=`Order ${dm} after ${dk.length} inserts:\n\n`+d.levels().map((l,i)=>`Level ${i}:  ${l}`).join('\n');
+  // build
+  const rows=[],bound=[],hs=[];
+  for(const m of orders){
+   const t=new BPT(m);const t0=performance.now();for(let r=0;r<N;r++)t.insert(ids[r],r);const ms=performance.now()-t0;
+   t.reads=0;const k=Math.min(LK,N);for(let i=0;i<k;i++){if(t.search(ids[i])!==i)throw'Lookup verification failed for m='+m}
+   const[h,c,l]=t.stats(),b=Math.ceil(Math.log(N)/Math.log(Math.ceil(m/2)));
+   rows.push({m,h,c,l,io:t.reads/k,b,ms});hs.push(h)}
+  $('tbl').innerHTML='<tr><th>Order m</th><th>Height</th><th>Nodes</th><th>Leaves</th><th>I/O per lookup</th><th>Bound ⌈log⌉</th><th>Build (ms)</th></tr>'+
+   rows.map(r=>`<tr><td>${r.m}</td><td>${r.h}</td><td>${fmt(r.c)}</td><td>${fmt(r.l)}</td><td>${r.io.toFixed(1)}</td><td>${r.b}</td><td>${Math.round(r.ms)}</td></tr>`).join('');
+  const ok=rows.every(r=>r.h<=r.b);
+  $('note').textContent=`Bulk table: ${fmt(N)} records, ${Math.min(LK,N)} verified lookups per order. Measured height ${ok?'is at or below':'exceeds'} the theoretical bound for every order.`;
+  // queries
+  const t=new BPT(qo);for(let r=0;r<N;r++)t.insert(ids[r],r);
+  const pkv=$('pk').value.trim(),q=pkv===''?ids[Math.min(123,N-1)]:+pkv;
+  t.reads=0;const pr=t.search(q),pReads=t.reads;
+  let lo=+$('lo').value,hi=+$('hi').value;if(lo>hi)[lo,hi]=[hi,lo];
+  t.reads=0;const rg=t.range(lo,hi),rReads=t.reads;
+  const dkv=$('dkey'),dq=$('dk').value.trim()===''?q:+$('dk').value;
+  const deleted=t.del(dq),after=t.search(dq);
+  const box=(b,s)=>`<div><b>${b}</b><span>${s}</span></div>`;
+  $('kv').innerHTML=box(pr===null?'not found':'found',`Point query emp_id=${q} (${pReads} page reads)`)+
+   box(fmt(rg.length)+' rows',`Range ${lo}..${hi}`)+box(rReads+' pages',`Indexed range scan (order ${qo})`)+
+   box(fmt(N)+' records','Full table scan equivalent')+box(Math.round(N/Math.max(rReads,1)).toLocaleString('en-US')+'×','Fewer reads than the full scan')+
+   box(deleted?'deleted':'absent',`DELETE emp_id=${dq}: search then returns ${after===null?'None':after}`);
+  $('rows').textContent=(pr!==null?`Point query result:\n  ${rec(pr)}\n\n`:'Point query: key not in index.\n\n')+
+   `Range query, first ${Math.min(3,rg.length)} of ${rg.length} rows:\n`+(rg.slice(0,3).map(x=>'  '+rec(x[1])).join('\n')||'  (none)');
+  // charts
+  const lab=orders.map(String);
+  $('c1').innerHTML=svgBars('Tree height vs order',lab,[{n:'Measured height',v:hs,c:'var(--ac)',type:'bar'},{n:'Theoretical bound',v:rows.map(r=>r.b),c:'var(--ac2)',type:'line'}],{ylab:'Order m'});
+  $('c2').innerHTML=svgBars('Range query cost (log scale)',['B+ tree index','Full table scan'],[{n:'Pages / records read',v:[rReads,N],c:'var(--ac)',type:'bar'}],{log:true,ylab:'Records or pages read'});
+  $('out').style.display='block';
+ }catch(e){err.textContent=typeof e==='string'?e:'Error: '+e.message}
+}
+$('run').addEventListener('click',()=>{const b=$('run');b.disabled=true;b.textContent='Running…';setTimeout(()=>{run();b.disabled=false;b.textContent='Build index & run'},30)});
+</script>
+</body>
+</html>
